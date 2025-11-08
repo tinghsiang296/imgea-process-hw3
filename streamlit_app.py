@@ -92,7 +92,7 @@ if mode.startswith('Rectify'):
             )
         except AttributeError as e:
             st.error('Canvas background failed to load. If this persists, consider using a pinned compatible version of streamlit-drawable-canvas or contact the instructor.')
-            raise
+            canvas_result = None
 
         # Optional: allow single-click capture on the same image (works even if point tool doesn't emit objects)
         if st.sidebar.checkbox('Enable single-click capture (Rectify)', key='enable_click_rect'):
@@ -267,7 +267,7 @@ else:
             )
         except AttributeError as e:
             st.error('Canvas background failed to load. If this persists, consider using a pinned compatible version of streamlit-drawable-canvas or contact the instructor.')
-            raise
+            canvas_result = None
 
         # Note: single-click capture removed — only Canvas (freedraw) is supported
 
