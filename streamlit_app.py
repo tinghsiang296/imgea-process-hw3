@@ -7,6 +7,7 @@ Usage:
 This app uses streamlit-drawable-canvas to let the user click points on the image.
 """
 import io
+import base64
 import numpy as np
 import cv2
 from PIL import Image
@@ -28,6 +29,18 @@ st.set_page_config(layout='wide')
 
 def pil_from_bytes(data):
     return Image.open(io.BytesIO(data)).convert('RGB')
+
+
+def pil_to_data_url(pil_image, fmt='PNG'):
+    """Convert a PIL Image to a data URL (base64) for use as background_image.
+
+    Using a data URL avoids relying on internal Streamlit APIs that some
+    versions of streamlit-drawable-canvas call and which can break on deploy.
+    """
+    buffered = io.BytesIO()
+    pil_image.save(buffered, format=fmt)
+    b = base64.b64encode(buffered.getvalue()).decode('ascii')
+    return f"data:image/{fmt.lower()};base64,{b}"
 
 
 st.title('Homography Interactive (Streamlit)')
@@ -62,11 +75,13 @@ if mode.startswith('Rectify'):
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(h, 900)
         canvas_w = min(w, 1200)
+        # convert to data URL to avoid version-dependent internal Streamlit calls
+        bg_data_url = pil_to_data_url(pil.convert('RGBA'))
         canvas_result = st_canvas(
             fill_color='rgba(0,0,0,0)',
             stroke_width=3,
             stroke_color='#ff0000',
-            background_image=pil.convert('RGBA'),
+            background_image=bg_data_url,
             update_streamlit=True,
             height=canvas_h,
             width=canvas_w,
@@ -232,11 +247,12 @@ else:
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(bh, 900)
         canvas_w = min(bw, 1200)
+        bg_data_url = pil_to_data_url(bg.convert('RGBA'))
         canvas_result = st_canvas(
             fill_color='rgba(0,0,0,0)',
             stroke_width=3,
             stroke_color='#00ff00',
-            background_image=bg.convert('RGBA'),
+            background_image=bg_data_url,
             update_streamlit=True,
             height=canvas_h,
             width=canvas_w,
