@@ -201,6 +201,73 @@ if mode.startswith('Rectify'):
                 except Exception:
                     pass
 
+        # Additional runtime diagnostics about the returned canvas object
+        try:
+            if canvas_result is not None:
+                cr_info = {'repr': repr(canvas_result)[:2000]}
+                try:
+                    cr_info['has_json'] = canvas_result.json_data is not None
+                except Exception:
+                    cr_info['has_json'] = None
+                try:
+                    cr_info['objects_len'] = len(canvas_result.json_data.get('objects', [])) if canvas_result.json_data else None
+                except Exception:
+                    cr_info['objects_len'] = None
+                try:
+                    has_img = hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None
+                    cr_info['has_image_data'] = bool(has_img)
+                    if has_img:
+                        try:
+                            arr = canvas_result.image_data
+                            cr_info['image_data_type'] = str(type(arr))
+                            try:
+                                cr_info['image_data_shape'] = getattr(arr, 'shape', None)
+                            except Exception:
+                                cr_info['image_data_shape'] = None
+                        except Exception:
+                            cr_info['image_data_shape'] = None
+                except Exception:
+                    cr_info['has_image_data'] = None
+                fname2 = save_debug(cr_info, prefix='proj_canvas_result')
+                if fname2:
+                    st.write(f'Canvas runtime diagnostic saved to {fname2}')
+        except Exception:
+            pass
+
+        # Additional runtime diagnostics about the returned canvas object
+        try:
+            if canvas_result is not None:
+                cr_info = {'repr': repr(canvas_result)[:2000]}
+                try:
+                    cr_info['has_json'] = canvas_result.json_data is not None
+                except Exception:
+                    cr_info['has_json'] = None
+                try:
+                    cr_info['objects_len'] = len(canvas_result.json_data.get('objects', [])) if canvas_result.json_data else None
+                except Exception:
+                    cr_info['objects_len'] = None
+                try:
+                    has_img = hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None
+                    cr_info['has_image_data'] = bool(has_img)
+                    if has_img:
+                        try:
+                            # try to capture shape/size without converting whole image
+                            arr = canvas_result.image_data
+                            cr_info['image_data_type'] = str(type(arr))
+                            try:
+                                cr_info['image_data_shape'] = getattr(arr, 'shape', None)
+                            except Exception:
+                                cr_info['image_data_shape'] = None
+                        except Exception:
+                            cr_info['image_data_shape'] = None
+                except Exception:
+                    cr_info['has_image_data'] = None
+                fname2 = save_debug(cr_info, prefix='rect_canvas_result')
+                if fname2:
+                    st.write(f'Canvas runtime diagnostic saved to {fname2}')
+        except Exception:
+            pass
+
         # Optional: allow single-click capture on the same image (works even if point tool doesn't emit objects)
         if st.sidebar.checkbox('Enable single-click capture (Rectify)', key='enable_click_rect'):
             if image_coords is None:
