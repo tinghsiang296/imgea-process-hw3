@@ -414,35 +414,69 @@ else:
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(bh, 900)
         canvas_w = min(bw, 1200)
-        bg_pil = bg.convert('RGBA')
-        canvas_kwargs = dict(
-            fill_color='rgba(0,0,0,0)',
-            stroke_width=3,
-            stroke_color='#00ff00',
-            update_streamlit=True,
-            height=canvas_h,
-            width=canvas_w,
-            drawing_mode=tool,
-            key='proj_canvas',
-        )
-        canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='proj')
-        if dbg_fname:
-            st.write(f'Canvas background diagnostic saved to {dbg_fname}')
-            try:
-                with open(dbg_fname, 'r', encoding='utf8') as _f:
-                    data = json.load(_f)
-                st.subheader('Canvas background diagnostic (preview)')
-                st.json(data)
-            except Exception:
+        use_single_click_proj = st.sidebar.checkbox('Use single-click fallback (streamlit-image-coords) for Project', key='use_click_proj')
+        if not use_single_click_proj:
+            bg_pil = bg.convert('RGBA')
+            canvas_kwargs = dict(
+                fill_color='rgba(0,0,0,0)',
+                stroke_width=3,
+                stroke_color='#00ff00',
+                update_streamlit=True,
+                height=canvas_h,
+                width=canvas_w,
+                drawing_mode=tool,
+                key='proj_canvas',
+            )
+            canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='proj')
+            if dbg_fname:
+                st.write(f'Canvas background diagnostic saved to {dbg_fname}')
                 try:
                     with open(dbg_fname, 'r', encoding='utf8') as _f:
-                        txt = _f.read()
-                    st.text(txt[:10000])
+                        data = json.load(_f)
+                    st.subheader('Canvas background diagnostic (preview)')
+                    st.json(data)
                 except Exception:
-                    pass
+                    try:
+                        with open(dbg_fname, 'r', encoding='utf8') as _f:
+                            txt = _f.read()
+                        st.text(txt[:10000])
+                    except Exception:
+                        pass
+        else:
+            # Show background image and collect single-click points via image_coords
+            st.image(bg, caption='Background (click to select points)')
+            if image_coords is None:
+                st.warning('streamlit-image-coords not available. Install with: pip install streamlit-image-coords')
+                canvas_result = None
+            else:
+                coords = None
+                try:
+                    try:
+                        coords = image_coords(bg)
+                    except TypeError:
+                        coords = image_coords(image=bg)
+                except Exception as e:
+                    st.error(f'image_coords error: {e}')
+                    coords = None
+                if coords is not None:
+                    st.write('image_coords result (debug):', coords)
+                    if isinstance(coords, dict) and 'x' in coords and 'y' in coords:
+                        cx, cy = float(coords['x']), float(coords['y'])
+                    elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                        cx, cy = float(coords[0]), float(coords[1])
+                    else:
+                        cx = cy = None
+                    if cx is not None:
+                        st.write(f'Current click: ({cx:.1f}, {cy:.1f})')
+                        if st.button('Add point (click)', key='add_point_click_proj'):
+                            st.session_state['proj_points'].append((cx, cy))
+                st.write('Collected single-click points (proj):', st.session_state['proj_points'])
+                if st.button('Clear single-click points (proj)', key='clear_proj_points'):
+                    st.session_state['proj_points'] = []
 
         # Note: single-click capture removed — only Canvas (freedraw) is supported
 
+        # Save canvas JSON if available
         if canvas_result is not None:
             try:
                 debug_dir = os.path.join(os.getcwd(), 'canvas_debug')
@@ -455,23 +489,28 @@ else:
             except Exception as e:
                 st.write(f'Could not save canvas json: {e}')
 
-        if canvas_result is not None and canvas_result.json_data is not None:
-            objects = canvas_result.json_data.get('objects', [])
-            if len(objects) >= 4:
-                pts = []
+        # Collect points either from single-click fallback or from canvas objects
+        points_found = []
+        if use_single_click_proj:
+            points_found = list(st.session_state.get('proj_points', []))
+        else:
+            if canvas_result is not None and getattr(canvas_result, 'json_data', None) is not None:
+                objects = canvas_result.json_data.get('objects', [])
                 for obj in objects[:4]:
                     x = obj.get('left', 0)
                     y = obj.get('top', 0)
-                    pts.append([x, y])
-                pts = np.array(pts, dtype=np.float64)
-                st.write('Selected points:')
-                st.write(pts)
-                if st.button('Run project'):
-                    src_pts = np.array([[0, 0], [tw - 1, 0], [tw - 1, th - 1], [0, th - 1]], dtype=np.float64)
-                    Hmat = estimate_homography(src_pts, pts)
-                    tex_cv = cv2.cvtColor(np.array(tex), cv2.COLOR_RGB2BGR)
-                    warped = warp_image(tex_cv, Hmat, (bg_cv.shape[0], bg_cv.shape[1]))
-                    mask = np.any(warped != 0, axis=2)
-                    comp = bg_cv.copy()
-                    comp[mask] = warped[mask]
-                    st.image(cv2.cvtColor(comp, cv2.COLOR_BGR2RGB), caption='Projected')
+                    points_found.append([x, y])
+
+        if len(points_found) >= 4:
+            pts = np.array(points_found[:4], dtype=np.float64)
+            st.write('Selected points:')
+            st.write(pts)
+            if st.button('Run project'):
+                src_pts = np.array([[0, 0], [tw - 1, 0], [tw - 1, th - 1], [0, th - 1]], dtype=np.float64)
+                Hmat = estimate_homography(src_pts, pts)
+                tex_cv = cv2.cvtColor(np.array(tex), cv2.COLOR_RGB2BGR)
+                warped = warp_image(tex_cv, Hmat, (bg_cv.shape[0], bg_cv.shape[1]))
+                mask = np.any(warped != 0, axis=2)
+                comp = bg_cv.copy()
+                comp[mask] = warped[mask]
+                st.image(cv2.cvtColor(comp, cv2.COLOR_BGR2RGB), caption='Projected')
