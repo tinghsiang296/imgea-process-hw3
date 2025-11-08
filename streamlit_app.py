@@ -169,35 +169,76 @@ if mode.startswith('Rectify'):
 
         st.write('Click 4 points on the image (order: TL, TR, BR, BL or any consistent clockwise/counterclockwise)')
         st.write('Tool: choose "point" if your browser supports it; otherwise use "freedraw" and draw small dots.')
+        use_single_click = st.sidebar.checkbox('Use single-click fallback (streamlit-image-coords)', key='use_click_rect')
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(h, 900)
         canvas_w = min(w, 1200)
         # Pass a PIL image as background. Some streamlit-drawable-canvas
         # versions expect an image-like object with .height/.width.
-        bg_pil = pil.convert('RGBA')
-        canvas_kwargs = dict(
-            fill_color='rgba(0,0,0,0)',
-            stroke_width=3,
-            stroke_color='#ff0000',
-            update_streamlit=True,
-            height=canvas_h,
-            width=canvas_w,
-            drawing_mode=tool,
-            key='rect_canvas',
-        )
-        canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='rect')
-        if dbg_fname:
-            st.write(f'Canvas background diagnostic saved to {dbg_fname}')
+        if not use_single_click:
+            bg_pil = pil.convert('RGBA')
+            canvas_kwargs = dict(
+                fill_color='rgba(0,0,0,0)',
+                stroke_width=3,
+                stroke_color='#ff0000',
+                update_streamlit=True,
+                height=canvas_h,
+                width=canvas_w,
+                drawing_mode=tool,
+                key='rect_canvas',
+            )
+            canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='rect')
+            if dbg_fname:
+                st.write(f'Canvas background diagnostic saved to {dbg_fname}')
+        else:
+            # show image and use single-click capture
+            st.image(pil, caption='Uploaded image (click to select points)')
+            if image_coords is None:
+                st.warning('streamlit-image-coords not available. Install with: pip install streamlit-image-coords')
+                canvas_result = None
+            else:
+                coords = None
+                try:
+                    try:
+                        coords = image_coords(pil)
+                    except TypeError:
+                        coords = image_coords(image=pil)
+                except Exception as e:
+                    st.error(f'image_coords error: {e}')
+                    coords = None
+                if coords is not None:
+                    st.write('image_coords result (debug):', coords)
+                    if isinstance(coords, dict) and 'x' in coords and 'y' in coords:
+                        cx, cy = float(coords['x']), float(coords['y'])
+                    elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
+                        cx, cy = float(coords[0]), float(coords[1])
+                    else:
+                        cx = cy = None
+                    if cx is not None:
+                        st.write(f'Current click: ({cx:.1f}, {cy:.1f})')
+                        if st.button('Add point (click)', key='add_point_click_rect'):
+                            st.session_state['rect_points'].append((cx, cy))
+                st.write('Collected single-click points:', st.session_state['rect_points'])
+                if st.button('Clear single-click points', key='clear_rect_points'):
+                    st.session_state['rect_points'] = []
             try:
-                with open(dbg_fname, 'r', encoding='utf8') as _f:
-                    data = json.load(_f)
-                st.subheader('Canvas background diagnostic (preview)')
-                st.json(data)
+                if 'dbg_fname' in locals() and dbg_fname:
+                    with open(dbg_fname, 'r', encoding='utf8') as _f:
+                        data = json.load(_f)
+                    st.subheader('Canvas background diagnostic (preview)')
+                    st.json(data)
+                    try:
+                        with open(dbg_fname, 'rb') as _f:
+                            blob = _f.read()
+                        st.download_button('Download background diagnostic JSON', data=blob, file_name=os.path.basename(dbg_fname), mime='application/json')
+                    except Exception:
+                        pass
             except Exception:
                 try:
-                    with open(dbg_fname, 'r', encoding='utf8') as _f:
-                        txt = _f.read()
-                    st.text(txt[:10000])
+                    if 'dbg_fname' in locals() and dbg_fname:
+                        with open(dbg_fname, 'r', encoding='utf8') as _f:
+                            txt = _f.read()
+                        st.text(txt[:10000])
                 except Exception:
                     pass
 
@@ -231,6 +272,12 @@ if mode.startswith('Rectify'):
                 fname2 = save_debug(cr_info, prefix='proj_canvas_result')
                 if fname2:
                     st.write(f'Canvas runtime diagnostic saved to {fname2}')
+                    try:
+                        with open(fname2, 'rb') as _f:
+                            blob2 = _f.read()
+                        st.download_button('Download canvas runtime diagnostic JSON', data=blob2, file_name=os.path.basename(fname2), mime='application/json')
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -268,70 +315,11 @@ if mode.startswith('Rectify'):
         except Exception:
             pass
 
-        # Optional: allow single-click capture on the same image (works even if point tool doesn't emit objects)
-        if st.sidebar.checkbox('Enable single-click capture (Rectify)', key='enable_click_rect'):
-            if image_coords is None:
-                st.warning('Single-click input requires streamlit-image-coords.')
-            else:
-                try:
-                    coords = None
-                    try:
-                        coords = image_coords(pil)
-                    except TypeError:
-                        try:
-                            coords = image_coords(image=pil)
-                        except Exception:
-                            coords = None
-                    st.write('image_coords result (debug):', coords)
-                    if coords is not None:
-                        if isinstance(coords, dict) and 'x' in coords and 'y' in coords:
-                            cx, cy = float(coords['x']), float(coords['y'])
-                        elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
-                            cx, cy = float(coords[0]), float(coords[1])
-                        else:
-                            cx = cy = None
-                    else:
-                        cx = cy = None
+        # end single-click handling
 
-                    if cx is not None:
-                        st.write(f'Current click: ({cx:.1f}, {cy:.1f})')
-                        if st.button('Add point (click)', key='add_point_click_rect'):
-                            st.session_state['rect_points'].append((cx, cy))
-                    st.write('Collected single-click points:', st.session_state['rect_points'])
-                    if st.button('Clear single-click points', key='clear_rect_points'):
-                        st.session_state['rect_points'] = []
-                except Exception as e:
-                    st.error(f'Error calling image_coords: {e}')
-
-        # If user chose Click input and image_coords is available, use it to get a single click coordinate
-        if input_mode.startswith('Click'):
-            if image_coords is None:
-                st.warning('Single-click input requires the package streamlit-image-coords. Install with:\npip install streamlit-image-coords')
-            else:
-                try:
-                    # try common API signatures
-                    coords = None
-                    try:
-                        coords = image_coords(pil)
-                    except TypeError:
-                        try:
-                            coords = image_coords(image=pil)
-                        except Exception:
-                            coords = None
-                    st.write('image_coords result (debug):', coords)
-                    # parse result
-                    if coords is not None:
-                        # coords might be dict {'x':..., 'y':...} or tuple/list
-                        if isinstance(coords, dict) and 'x' in coords and 'y' in coords:
-                            cx, cy = float(coords['x']), float(coords['y'])
-                            points_found = [(cx, cy)]
-                        elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
-                            cx, cy = float(coords[0]), float(coords[1])
-                            points_found = [(cx, cy)]
-                        else:
-                            points_found = []
-                except Exception as e:
-                    st.error(f'Error calling image_coords: {e}')
+        # If user used single-click fallback, prefer collected points from session state
+        if use_single_click:
+            points_found = list(st.session_state.get('rect_points', []))
 
         # debug: show raw canvas json and save to file for debugging
         if canvas_result is not None:
@@ -377,8 +365,8 @@ if mode.startswith('Rectify'):
                     pass
             return None
 
-        points_found = []
-        if canvas_result is not None and canvas_result.json_data is not None:
+        points_found = points_found if 'points_found' in locals() else []
+        if canvas_result is not None and getattr(canvas_result, 'json_data', None) is not None:
             objects = canvas_result.json_data.get('objects', [])
             for obj in objects:
                 p = obj_to_point(obj)
@@ -404,7 +392,7 @@ if mode.startswith('Rectify'):
                 warped = warp_image(img_cv, Hmat, (H, W))
                 st.image(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB), caption='Rectified')
         else:
-            st.info('No points detected yet. If clicking does not create objects, try using the "freedraw" tool to draw small dots (draw small circles), then the app will extract their centroids as points.')
+            st.info('No points detected yet. If clicking does not create objects, try using the "freedraw" tool to draw small dots (draw small circles), then the app will extract their centroids as points. Alternatively enable the single-click fallback in the sidebar to pick points directly on the image.')
 
 else:
     uploaded_tex = st.sidebar.file_uploader('Upload texture image', type=['png', 'jpg', 'jpeg'])
