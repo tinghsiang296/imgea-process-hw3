@@ -1,0 +1,16 @@
+__pycache__/
+.DS_Store
+canvas_debug/
+streamlit.log
+.venv/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.egg-info/
+/.idea/
+/.vscode/
+env/
+venv/
+dist/
+build/
