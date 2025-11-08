@@ -188,6 +188,18 @@ if mode.startswith('Rectify'):
         canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='rect')
         if dbg_fname:
             st.write(f'Canvas background diagnostic saved to {dbg_fname}')
+            try:
+                with open(dbg_fname, 'r', encoding='utf8') as _f:
+                    data = json.load(_f)
+                st.subheader('Canvas background diagnostic (preview)')
+                st.json(data)
+            except Exception:
+                try:
+                    with open(dbg_fname, 'r', encoding='utf8') as _f:
+                        txt = _f.read()
+                    st.text(txt[:10000])
+                except Exception:
+                    pass
 
         # Optional: allow single-click capture on the same image (works even if point tool doesn't emit objects)
         if st.sidebar.checkbox('Enable single-click capture (Rectify)', key='enable_click_rect'):
@@ -361,6 +373,18 @@ else:
         canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='proj')
         if dbg_fname:
             st.write(f'Canvas background diagnostic saved to {dbg_fname}')
+            try:
+                with open(dbg_fname, 'r', encoding='utf8') as _f:
+                    data = json.load(_f)
+                st.subheader('Canvas background diagnostic (preview)')
+                st.json(data)
+            except Exception:
+                try:
+                    with open(dbg_fname, 'r', encoding='utf8') as _f:
+                        txt = _f.read()
+                    st.text(txt[:10000])
+                except Exception:
+                    pass
 
         # Note: single-click capture removed — only Canvas (freedraw) is supported
 
