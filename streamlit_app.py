@@ -75,19 +75,24 @@ if mode.startswith('Rectify'):
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(h, 900)
         canvas_w = min(w, 1200)
-        # convert to data URL to avoid version-dependent internal Streamlit calls
-        bg_data_url = pil_to_data_url(pil.convert('RGBA'))
-        canvas_result = st_canvas(
-            fill_color='rgba(0,0,0,0)',
-            stroke_width=3,
-            stroke_color='#ff0000',
-            background_image=bg_data_url,
-            update_streamlit=True,
-            height=canvas_h,
-            width=canvas_w,
-            drawing_mode=tool,
-            key='rect_canvas',
-        )
+        # Pass a PIL image as background. Some streamlit-drawable-canvas
+        # versions expect an image-like object with .height/.width.
+        bg_pil = pil.convert('RGBA')
+        try:
+            canvas_result = st_canvas(
+                fill_color='rgba(0,0,0,0)',
+                stroke_width=3,
+                stroke_color='#ff0000',
+                background_image=bg_pil,
+                update_streamlit=True,
+                height=canvas_h,
+                width=canvas_w,
+                drawing_mode=tool,
+                key='rect_canvas',
+            )
+        except AttributeError as e:
+            st.error('Canvas background failed to load. If this persists, consider using a pinned compatible version of streamlit-drawable-canvas or contact the instructor.')
+            raise
 
         # Optional: allow single-click capture on the same image (works even if point tool doesn't emit objects)
         if st.sidebar.checkbox('Enable single-click capture (Rectify)', key='enable_click_rect'):
@@ -247,18 +252,22 @@ else:
         # limit canvas size to reasonable viewport to avoid rendering issues
         canvas_h = min(bh, 900)
         canvas_w = min(bw, 1200)
-        bg_data_url = pil_to_data_url(bg.convert('RGBA'))
-        canvas_result = st_canvas(
-            fill_color='rgba(0,0,0,0)',
-            stroke_width=3,
-            stroke_color='#00ff00',
-            background_image=bg_data_url,
-            update_streamlit=True,
-            height=canvas_h,
-            width=canvas_w,
-            drawing_mode=tool,
-            key='proj_canvas',
-        )
+        bg_pil = bg.convert('RGBA')
+        try:
+            canvas_result = st_canvas(
+                fill_color='rgba(0,0,0,0)',
+                stroke_width=3,
+                stroke_color='#00ff00',
+                background_image=bg_pil,
+                update_streamlit=True,
+                height=canvas_h,
+                width=canvas_w,
+                drawing_mode=tool,
+                key='proj_canvas',
+            )
+        except AttributeError as e:
+            st.error('Canvas background failed to load. If this persists, consider using a pinned compatible version of streamlit-drawable-canvas or contact the instructor.')
+            raise
 
         # Note: single-click capture removed — only Canvas (freedraw) is supported
 
