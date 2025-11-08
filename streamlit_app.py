@@ -27,6 +27,10 @@ except Exception:
 
 st.set_page_config(layout='wide')
 
+# Set to True only when you want to collect and expose debug artifacts.
+# Keep False for normal deployments to avoid leaving files/paths visible.
+DEBUG_SAVE = False
+
 
 def pil_from_bytes(data):
     return Image.open(io.BytesIO(data)).convert('RGB')
@@ -45,6 +49,9 @@ def pil_to_data_url(pil_image, fmt='PNG'):
 
 
 def save_debug(info: dict, prefix: str = 'canvas_debug'):
+    # Only persist debug artifacts when DEBUG_SAVE is enabled
+    if not DEBUG_SAVE:
+        return None
     try:
         debug_dir = os.path.join(os.getcwd(), 'canvas_debug')
         os.makedirs(debug_dir, exist_ok=True)
@@ -159,6 +166,8 @@ if mode.startswith('Rectify'):
     uploaded = st.sidebar.file_uploader('Upload image to rectify', type=['png', 'jpg', 'jpeg'])
     if uploaded is not None:
         # use getvalue() to safely obtain bytes and allow re-use
+        canvas_result = None
+        dbg_fname = None
         pil = pil_from_bytes(uploaded.getvalue())
         img_cv = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
         h, w = pil.size[1], pil.size[0]
@@ -188,7 +197,7 @@ if mode.startswith('Rectify'):
                 key='rect_canvas',
             )
             canvas_result, dbg_fname = create_canvas_with_diagnostics(bg_pil, canvas_kwargs, prefix='rect')
-            if dbg_fname:
+            if DEBUG_SAVE and dbg_fname:
                 st.write(f'Canvas background diagnostic saved to {dbg_fname}')
         else:
             # show image and use single-click capture
@@ -221,8 +230,8 @@ if mode.startswith('Rectify'):
                 st.write('Collected single-click points:', st.session_state['rect_points'])
                 if st.button('Clear single-click points', key='clear_rect_points'):
                     st.session_state['rect_points'] = []
-            try:
-                if 'dbg_fname' in locals() and dbg_fname:
+            if DEBUG_SAVE and 'dbg_fname' in locals() and dbg_fname:
+                try:
                     with open(dbg_fname, 'r', encoding='utf8') as _f:
                         data = json.load(_f)
                     st.subheader('Canvas background diagnostic (preview)')
@@ -233,14 +242,13 @@ if mode.startswith('Rectify'):
                         st.download_button('Download background diagnostic JSON', data=blob, file_name=os.path.basename(dbg_fname), mime='application/json')
                     except Exception:
                         pass
-            except Exception:
-                try:
-                    if 'dbg_fname' in locals() and dbg_fname:
+                except Exception:
+                    try:
                         with open(dbg_fname, 'r', encoding='utf8') as _f:
                             txt = _f.read()
                         st.text(txt[:10000])
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
         # Additional runtime diagnostics about the returned canvas object
         try:
@@ -398,6 +406,8 @@ else:
     uploaded_tex = st.sidebar.file_uploader('Upload texture image', type=['png', 'jpg', 'jpeg'])
     uploaded_bg = st.sidebar.file_uploader('Upload background image', type=['png', 'jpg', 'jpeg'])
     if uploaded_tex is not None and uploaded_bg is not None:
+        canvas_result = None
+        dbg_fname = None
         tex = pil_from_bytes(uploaded_tex.getvalue())
         bg = pil_from_bytes(uploaded_bg.getvalue())
         bg_cv = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
